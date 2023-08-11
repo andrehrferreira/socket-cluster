@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+
+<head>
+    <title>Cluster Socket</title>
+    <style>
+        #app {
+            display: flex;
+            flex-wrap: nowrap;
+        }
+
+        .connList {
+            width: 20%;
+            height: 600px;
+            display: block;
+            margin: auto;
+            margin-right: 10px;
+            overflow: hidden;
+            overflow-y: scroll;
+
+        }
+
+        .broadcast {
+            width: 80%;
+            max-width: 600px;
+            height: 600px;
+            display: block;
+            margin: auto;
+            margin-top: 20px;
+            overflow: hidden;
+            overflow-y: scroll;
+        }
+
+        .connList div,
+        .broadcast div {
+            margin-top: 40px;
+        }
+
+        .actions {
+            width: 100%;
+            padding: 10px;
+        }
+
+        p {
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <fieldset class="connList">
+            <legend>Conexões:</legend>
+            <div>
+                <p v-for="(socket, index) in sockets">
+                    [{{ socket.id }}] - {{ (socket.connected) ? 'Conectado' : 'Disconectado' }}
+                </p>
+            </div>
+
+        </fieldset>
+
+        <fieldset class="broadcast logs">
+            <legend>Logs:</legend>
+
+            <div>
+                <p v-for="item in logs">
+                    [{{ item.datetime.toLocaleDateString('pt-br') }} {{ item.datetime.toLocaleTimeString('pt-br') }}] -
+                    {{ item.msg }}
+                </p>
+            </div>
+
+        </fieldset>
+
+        <div class="actions">
+            <input v-model="url" type="text">
+            <button @click="testCrw">
+                Iniciar teste
+            </button>
+            <button @click="logs = []">
+                Limpar
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.js"></script>
+    <script>
+        let app = new Vue({
+            data: () => {
+                return {
+                    logs: [],
+                    socket: null,
+                    sockets: [],
+                    maxConns: 10,
+                    url: "https://www.casasbahia.com.br/Informatica/Notebook/notebook-samsung-dual-core-4gb-500gb-tela-15-6-windows-10-book-e20-np550xcj-ko1br-55008233.html?rectype=p1_ov_s1&recsource=col-37453"
+                }
+            },
+
+            mounted() {
+                this.appendLog("Mounted");
+                this.createSocket();
+            },
+
+            methods: {
+
+                appendLog(msg) {
+                    this.logs.push({ msg, datetime: new Date() });
+
+                    let container = this.$el.querySelector(".logs");
+                    container.scrollTop = container.scrollHeight;
+                },
+
+                createSocket() {
+                     const socketURI = "wss://ws.vigiadepreco.com.br";
+                    //  const socketURI = "ws://localhost:5559";
+                    const socket = io(socketURI, { /* ws://wscluster:5559 */
+                        reconnectionDelayMax: 10000,
+                        transports: ["websocket"]
+                    });
+
+                    socketId = null;
+
+                    socket.on("connect", () => {
+                        socketId = socket.id;
+                        this.appendLog(`${socket.id} connect`);
+                        this.sockets.push(socket);
+                    });
+
+                    socket.on("message", (message) => {
+                        this.parseMessage(JSON.parse(message), socket);
+                    });
+
+                    socket.on("disconnect", (data) => {
+                        let clients = [];
+
+                        for (let key in this.sockets) {
+                            if (this.sockets.connected)
+                                clients.push(this.sockets);
+                        }
+
+                        this.sockets = clients;
+                        this.appendLog(`${socketId} disconnect`);
+                    });
+                },
+
+                parseMessage(message, socket) {
+                    switch (message.type) {
+                        case "feedback": this.feedback(message, socket); break;
+                    }
+                },
+
+                feedback(message, socket) {
+                    this.appendLog(`${socket.id} recive feedback ${message.uuid} \n\n ${JSON.stringify(message, null, 4)}`);
+                },
+
+                testCrw() {
+                    const socket = this.getRandomSocket();
+                    this.appendLog(`${socket.id} send request`);
+
+                    socket.emit("request", {
+                        url: this.url
+                    });
+                },
+
+
+                getRandomSocket(){
+                    return this.sockets[this.__RandomMinMax(0, this.sockets.length)];
+                },
+                
+                __RandomMinMax(min, max){
+                    return Math.floor(Math.random() * (max - min) ) + min;
+                },
+            }
+        });
+
+        app.$mount("#app");
+    </script>
+</body>

@@ -1,0 +1,27 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+node_modules/
+jspm_packages/
+package-lock.json
+yarn.lock
+.env
+
+# Application Keys
+application.key
+application.public
+
+#GSuite Admin SDK
+credentials.json
+token.json
+
+# Build
+/build
+
+.idea
+data/*.xml

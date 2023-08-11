@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<head>
+    <title>Cluster Socket</title>
+    <style>
+        #app{
+            display: flex;
+            flex-wrap: nowrap;
+        }
+
+        .connList{
+            width: 20%;
+            height: 600px;
+            display: block;
+            margin: auto;
+            margin-right: 10px;
+            overflow: hidden;
+            overflow-y: scroll;
+            
+        }
+
+        .broadcast{
+            width: 80%;
+            height: 600px;
+            max-width: 600px;
+            display: block;
+            margin: auto;
+            margin-top: 20px;
+            overflow: hidden;
+            overflow-y: scroll;
+        }
+
+        .connList div, .broadcast div{
+            margin-top: 40px;
+        }
+
+        .actions{
+            width: 100%;
+            padding: 10px;
+        }
+        p {
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <fieldset class="connList">
+            <legend>Conexões:</legend>
+            <div>
+                <p v-for="(socket, index) in sockets">
+                    [{{ socket.id }}] - {{ (socket.connected) ? 'Conectado' : 'Disconectado' }}
+                </p>
+            </div>
+            
+        </fieldset>
+
+        <fieldset class="broadcast logs">
+            <legend>Logs:</legend>
+
+            <div>
+                <p v-for="item in logs">
+                    [{{ item.datetime.toLocaleDateString('pt-br') }} {{ item.datetime.toLocaleTimeString('pt-br') }}] - {{ item.msg }}
+                </p>
+            </div>
+            
+        </fieldset>
+
+        <div class="actions">
+            <button @click="testCrw">
+                Iniciar teste 
+            </button>
+            <button @click="logs = []">
+                Limpar
+            </button>
+        </div>
+    </div>    
+
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.js"></script>
+    <script>
+        let app = new Vue({
+            data: () => {
+                return {
+                    logs: [],
+                    sockets: [],
+                    maxConns: 10
+                }
+            },
+
+            mounted(){
+                //this.appendLog("Mounted");
+
+                for(let i = 0; i < this.maxConns; i++)
+                    this.createSocket();
+            },
+
+            methods: {
+                __RandomMinMax(min, max){
+                    return Math.floor(Math.random() * (max - min) ) + min;
+                },
+
+                appendLog(msg){
+                    this.logs.push({ msg, datetime: new Date()});
+                    let container = this.$el.querySelector(".logs");
+                    container.scrollTop = container.scrollHeight;
+                },
+
+                createSocket(){
+                    const socket = io("ws://wscluster:5558", { /* ws://wscluster:5558 */ /* "wss://ws2.vigiadepreco.com.br:444" */
+                        reconnectionDelayMax: 10000,
+                        transports: ['websocket']
+                    });
+
+                    socketId = null;
+
+                    socket.on("connect", () => {
+                        socketId = socket.id; 
+                        this.appendLog(`${socket.id} connect`);
+                        this.sockets.push(socket);
+                        this.join(socket, "extension");
+                    });
+
+                    socket.on("message", (message) => {
+                        this.parseMessage(JSON.parse(message), socket);
+                    });
+
+                    socket.on("disconnect", (data) => {
+                        let clients = [];
+
+                        for(let key in this.sockets){
+                            if(this.sockets.connected)
+                                clients.push(this.sockets);
+                        }
+
+                        this.sockets = clients;
+                        this.appendLog(`${socketId} disconnect`);
+                    });
+                },
+
+                join(socket, type){
+                    socket.emit("join", { type });
+                },
+
+                testCrw(){
+                    for(let key = 0; key < this.maxConns; key++){
+                        setTimeout(() => {
+                            const socket = this.getRandomSocket();
+                            this.appendLog(`${socket.id} send request`);
+ 
+                            socket.emit("request", {
+                                url: "https://clube2.magazineluiza.com.br/produto/224988400/preco.json"
+                            });
+                        }, key * 100);
+                    }
+                },
+
+                getRandomSocket(){
+                    return this.sockets[this.__RandomMinMax(0, this.sockets.length)];
+                },
+
+                parseMessage(message, socket){
+                    switch(message.type){
+                        case "request": this.request(message, socket); break;
+                        case "feedback": this.feedback(message, socket); break;
+                    }
+                },
+
+                request(message, socket){
+                    this.appendLog(`${socket.id} recive request to ${message.sender}`);
+
+                    fetch(message.data.url, {
+                        method: "GET",
+                        mode: "no-cors",
+                        referrerPolicy: "no-referrer",
+                        credentials: "include",
+                    })
+                    .then((response) => response.text())
+                    .then(data => {
+                        this.appendLog(`${socket.id} send return to ${message.sender}`);
+                        socket.emit("feedback", { ...message, ...{ body: data, error: null } });
+                        return true;
+                    })
+                    .catch(e => {
+                        this.appendLog(`${socket.id} error to request ${message.uuid}`);
+                        socket.emit("feedback", { ...message, ...{ body: null, error: e } });
+                        return false;
+                    });
+                },
+
+                feedback(message, socket){
+                    this.appendLog(`${socket.id} recive feedback ${message.uuid} \n\n ${JSON.stringify(message, null, 4)}`);
+                }
+            }
+        });
+
+        app.$mount("#app");
+    </script>
+</body>

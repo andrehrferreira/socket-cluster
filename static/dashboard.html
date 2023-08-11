@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<head>
+    <title>Cluster Socket Dashboard</title>
+    <style>
+        #app{
+            
+        }
+
+        .row{
+            display: flex;
+            flex-wrap: nowrap;
+        }
+
+        .connList{
+            width: 20%;
+            height: 600px;
+            display: block;
+            margin: auto;
+            margin-right: 10px;
+            overflow: hidden;
+            overflow-y: scroll;
+            
+        }
+
+        .broadcast{
+            width: 80%;
+            height: 600px;
+            max-width: 600px;
+            display: block;
+            margin: auto;
+            margin-top: 20px;
+            overflow: hidden;
+            overflow-y: scroll;
+        }
+
+        .connList div, .broadcast div{
+            margin-top: 40px;
+        }
+
+        .actions{
+            width: 100%;
+            padding: 10px;
+        }
+
+        p {
+            overflow-wrap: anywhere;
+        }
+
+        .box{
+            border: 1px solid #CCC;
+            min-height: 100px;
+            margin-right: 10px;
+        }
+
+        .box legend{
+            padding: 10px;
+        }
+
+        .legendCount{
+            padding: 20px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .hostsTable{
+            border: 1px solid #CCC;
+        }
+
+        .hostsTable th, .hostsTable td{
+            text-align: left;
+            border: none;
+            border-bottom: 1px solid #CCC;
+            border-right: 1px solid #CCC;
+            padding: 10px;
+            margin: 0px;
+            max-height: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="row">
+            <div style="width: 20%" class="box">
+                <legend>Servers</legend>
+                <div class="legendCount">{{ Object.keys(this.hosts).length }}</div>
+            </div> 
+
+            <div style="width: 20%" class="box">
+                <legend>Conexões</legend>
+                <div class="legendCount">{{ (sumConns() || 0).toLocaleString("pt-br") }}</div>
+            </div> 
+
+            <div style="width: 20%" class="box">
+                <legend>Crawler</legend>
+                <div class="legendCount">{{ (sumCrawlers() || 0).toLocaleString("pt-br") }}</div>
+            </div> 
+
+            <div style="width: 20%" class="box">
+                <legend>Requests</legend>
+                <div class="legendCount">{{ (sumRequests() || 0).toLocaleString("pt-br") }}/s</div>
+            </div> 
+            
+            <div style="width: 20%" class="box">
+                <legend>Latência</legend>
+                <div class="legendCount">{{ latency.toFixed(0) }}ms</div>
+            </div>
+        </div>
+
+        <div class="row" style="margin-top: 10px">
+            <div style="width: 100%; border: none" class="box">
+                <table class="hostsTable" style="width: 100%">
+                    <thead>
+                        <tr>
+                            <th>Host</th>
+                            <th>Clients</th>
+                            <th>Crawler</th>
+                            <th>Requests</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="host in hosts">
+                            <td>{{ host.host }}</td>
+                            <td>{{ (host.clients || 0).toLocaleString("pt-br") }}</td>
+                            <td>{{ (host.crows || 0).toLocaleString("pt-br") }}</td>
+                            <td>{{ (host.requests || 0).toLocaleString("pt-br") }}/s</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>    
+
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.js"></script>
+    <script>
+        let app = new Vue({
+            data: () => {
+                return {
+                    logs: [],
+                    socket: null,
+                    maxConns: 1,
+                    hosts: {},
+                    pingTimer: 0,
+                    latency: 0
+                }
+            },
+
+            mounted(){
+                //this.appendLog("Mounted");
+
+                for(let i = 0; i < this.maxConns; i++)
+                    this.createSocket();
+
+                setInterval(() => {
+                    const hosts = Object.keys(this.hosts).filter((key) => (this.hosts[key].ttl > new Date().getTime())).filter((item) => item);
+                    const hostsAssoc = {};
+
+                    for(let key in hosts)
+                        hostsAssoc[this.hosts[hosts[key]].host] = this.hosts[hosts[key]];
+
+                    this.hosts = hostsAssoc;                   
+                    this.$forceUpdate();
+                }, 40000);
+            },
+
+            methods: {
+                __RandomMinMax(min, max){
+                    return Math.floor(Math.random() * (max - min) ) + min;
+                },
+
+                createSocket(){
+                    console.log(`conneting...`);
+                    let _this = this;
+
+                    const socket = io("wss://ws2.vigiadepreco.com.br:444", { /* ws://wscluster:5558 */ /* "wss://ws.vigiadepreco.com.br" */
+                        reconnectionDelay: 60000,
+                        reconnectionDelayMax: 5000,
+                        timeout: 120000,
+                        pingTimeout: 60000,
+                        transports: ['websocket'],
+                        forceNew: true,
+                        rejectUnauthorized: false
+                    });
+
+                    socketId = null;
+
+                    socket.on("connect", () => {
+                        socketId = socket.id; 
+                        console.log(`${socket.id} connect`);
+
+                        if(this.socket){
+                            this.socket.disconnect();
+                            this.socket = null;
+                        }
+                            
+                        this.socket = socket;
+                        this.joinDash(socket);
+                    });
+
+                    socket.on("disconnect", () => {
+                        console.log(`disconnect`);
+                    });
+
+                    socket.on("connectTimeout", () => {
+                        console.log(`connectTimeout`);
+
+                        if(this.socket){
+                            this.socket.disconnect();
+                            this.socket = null;
+                        }
+
+                        this.createSocket();
+                    });
+
+                    socket.on("reconnect", () => {
+                        console.log(`reconnect`);
+
+                        if(this.socket){
+                            this.socket.disconnect();
+                            this.socket = null;
+                        }
+
+                        this.createSocket();
+                    });
+
+                    socket.on("ping", () => {
+                        console.log(`ping`);
+                        this.pingTimer = new Date().getTime();
+                    });
+
+                    socket.on("pong", () => {
+                        console.log(`pong`);
+                        const timerPong = new Date().getTime();
+                        this.latency = timerPong - this.pingTimer;
+                        this.$forceUpdate();
+                    });
+
+                    socket.on("report", (message) => {
+                        message = JSON.parse(message);
+                        this.hosts[message.host] = message; 
+                        this.hosts[message.host].ttl = new Date().getTime() + 60000;
+                        this.$forceUpdate();
+                    });
+                },
+
+                sumConns(){
+                    return Object.keys(this.hosts).map((host) => this.hosts[host].clients).reduce((total, num) => { return total + num; });
+                },
+
+                sumRequests(){
+                    return Object.keys(this.hosts).map((host) => this.hosts[host].requests).reduce((total, num) => { return total + num; });
+                },
+
+                sumCrawlers(){
+                    return Object.keys(this.hosts).map((host) => this.hosts[host].crows).reduce((total, num) => { return total + num; });
+                },
+
+                joinDash(socket, type){
+                    socket.emit("dash");
+                },
+            }
+        });
+
+        app.$mount("#app");
+    </script>
+</body>

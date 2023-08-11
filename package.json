@@ -1,0 +1,64 @@
+{
+    "name": "socket-cluster",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Websocket cluster",
+    "author": "Andre Ferreira <andrehrf@gmail.com>",
+    "main": "index.js",
+    "homepage": "https://github.com/andrehrferreira/socket-cluster",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/andrehrferreira/socket-cluster"
+    },
+    "bugs": {
+        "url": "https://github.com/andrehrferreira/socket-cluster/issues"
+    },
+    "scripts": {
+        "clean": "rm -rf build",
+        "dev": "cross-env NODE_ENV=development NODE_NO_WARNINGS=1 nodemon -w src --exec 'babel-node src/index.js'",
+        "build": "babel src -s -D -d build",
+        "lint": "eslint '**/*.js'",
+        "lint:fix": "eslint '**/*.js' --fix",
+        "start": "NODE_ENV=production NODE_NO_WARNINGS=1 node --unhandled-rejections=none --nouse-idle-notification --expose-gc --max-old-space-size=8192 build/index.js"
+    },
+    "husky": {
+        "hooks": {
+            "pre-commit": "npm run lint"
+        }
+    },
+    "dependencies": {
+        "@babel/polyfill": "^7.4.4",
+        "@dekproject/logger": "^0.1.4",
+        "@dekproject/rabbitmq": "^2.0.2",
+        "@dekproject/redis": "^2.1.2",
+        "@dekproject/scope": "^2.0.1",
+        "cross-env": "^7.0.0",
+        "dotenv": "^6.2.0",
+        "expose-gc": "^1.0.0",
+        "express": "^4.17.1",
+        "md5": "^2.3.0",
+        "newrelic": "^5.13.1",
+        "nodemon": "^1.19.1",
+        "redis": "^3.0.2",
+        "socket.io": "^2.3.0",
+        "socket.io-redis": "^5.4.0",
+        "uniqid": "^5.2.0",
+        "winston": "^3.3.3"
+    },
+    "devDependencies": {
+        "@babel/cli": "^7.5.5",
+        "@babel/core": "^7.5.5",
+        "@babel/node": "^7.5.5",
+        "@babel/preset-env": "^7.5.5",
+        "@babel/register": "^7.5.5",
+        "babel-eslint": "^10.0.3",
+        "chai": "^4.2.0",
+        "ejs": "^2.7.4",
+        "eslint": "^6.2.2",
+        "husky": "^4.2.1",
+        "kill-port": "^1.6.0",
+        "mocha": "^6.2.0",
+        "supertest": "^4.0.2"
+    }
+}

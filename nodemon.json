@@ -1,0 +1,11 @@
+{
+    "events": {
+        "restart": "kill-port 5559",
+        "crash": "kill-port 5559"
+    },
+    "delay": "1500",
+    "ignore": [
+        "src/*.json",
+        "build"
+    ]
+}
